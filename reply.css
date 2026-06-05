@@ -5,24 +5,26 @@
   align-items: center;
   justify-content: center;
   margin-left: 6px;
-  padding: 0 6px;
+  padding: 0 7px;
   height: 18px;
   min-width: 18px;
   font-size: 12px;
+  font-weight: 700;
   line-height: 1;
-  color: #1b7fbb;
-  background: transparent;
-  border: 1px solid transparent;
+  /* Amber/orange so it reads on both light and dark Chatwork themes. */
+  color: #b35a00;
+  background: #ffb300;
+  border: 1px solid #e08a00;
   border-radius: 4px;
   cursor: pointer;
   vertical-align: middle;
-  opacity: 0.6;
+  opacity: 0.92;
   transition: opacity .12s, background .12s, border-color .12s;
 }
 .cwr-trigger:hover {
   opacity: 1;
-  background: #eaf4fb;
-  border-color: #b9ddf2;
+  background: #ff9800;
+  border-color: #c46a00;
 }
 
 /* ---- Overlay + modal ---- */
