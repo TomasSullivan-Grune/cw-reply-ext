@@ -265,37 +265,27 @@
     return null;
   }
 
-  // Chatwork renders [To:]/[返信] mentions as element "pills" inside the <pre>,
-  // while the actual message body is a text node. So leading element children
-  // are recipients the sender addressed; the rest is the body. (If the raw
-  // source still has literal tags, prettifyMentions handles those in the body.)
+  // The body is ALWAYS the full rendered text — we never risk dropping content
+  // by trying to split it. Recipients are read only from mention "pills", which
+  // Chatwork renders as anchor (<a>) elements; plain body text is never an
+  // anchor, so this can't eat the message. Real links (http URLs) are excluded.
+  // If mentions aren't anchors in some view, the To: line is simply omitted —
+  // the body is still complete.
   function readMessage(container) {
     const pre = container.querySelector('pre');
     if (!pre) return { recipients: [], body: '' };
 
-    const recipients = [];
-    let body = '';
-    let inBody = false;
+    const body = (pre.innerText || pre.textContent || '').trim();
 
-    pre.childNodes.forEach(function (node) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        if (!inBody && !node.textContent.trim()) return; // skip leading blank lines
-        inBody = true;
-        body += node.textContent;
-        return;
-      }
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const t = (node.innerText || node.textContent || '').trim();
-        if (!inBody) {
-          if (t) recipients.push(t.replace(/さん$/, ''));
-        } else {
-          body += (node.innerText || node.textContent || ''); // inline link/emoji in body
-        }
-      }
+    const recipients = [];
+    pre.querySelectorAll('a').forEach(function (a) {
+      const href = a.getAttribute('href') || '';
+      const t = (a.innerText || a.textContent || '').trim();
+      if (!t) return;
+      if (/^https?:\/\//i.test(href) || /^https?:\/\//i.test(t)) return; // a real link, not a mention
+      recipients.push(t.replace(/^(To|TO)\s*[:：]?\s*/, '').replace(/さん$/, ''));
     });
 
-    body = body.replace(/^\s+/, '');
-    if (!recipients.length && !body) body = pre.innerText || pre.textContent || '';
     return { recipients: recipients, body: body };
   }
 
