@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Chatwork Reply (Claude)",
+  "version": "1.0.0",
+  "description": "Adds a reply button under each Chatwork message that drafts a reply with Claude, via a local Claude Code bridge running on your machine.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": { "service_worker": "background.js" },
+  "host_permissions": [
+    "http://localhost:8766/*",
+    "http://127.0.0.1:8766/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://*.chatwork.com/*"],
+      "js": ["content.js"],
+      "css": ["reply.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
