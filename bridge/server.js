@@ -73,10 +73,17 @@ function buildPrompt(message, instructions, sender, recipients) {
 
 function runClaude(prompt) {
   return new Promise((resolve, reject) => {
+    // Three layers keep Claude Code's "superpowers"/CLAUDE.md system out of the
+    // output (kept identical in the polish bridge for consistency):
+    //   1. --system-prompt replaces the system prompt, where the superpowers
+    //      SessionStart injection and the global ~/CLAUDE.md ride in. This is
+    //      the real lever; it preserves auth (unlike --bare).
+    //   2. cwd: os.tmpdir() runs outside any project so no project-level
+    //      CLAUDE.md is picked up from the working directory.
+    //   3. The prompt itself asks for no preamble / no skill notices.
     const args = ['-p', prompt, '--output-format', 'json', '--system-prompt', 'You are a helpful assistant.'];
     if (MODEL) args.push('--model', MODEL);
 
-    // Run in a temp dir so Claude Code doesn't pick up a project's CLAUDE.md.
     const child = spawn('claude', args, { cwd: os.tmpdir(), stdio: ['ignore', 'pipe', 'pipe'] });
 
     let out = '';
