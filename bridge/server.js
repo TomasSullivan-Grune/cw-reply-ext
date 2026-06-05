@@ -26,7 +26,8 @@ const PORT = Number(process.env.CW_REPLY_PORT) || 8766;
 const MODEL = process.env.CW_REPLY_MODEL || '';
 const TIMEOUT_MS = 120000;
 
-function buildPrompt(message, instructions, sender) {
+function buildPrompt(message, instructions, sender, recipients) {
+  const recList = Array.isArray(recipients) ? recipients.filter(function (r) { return r && r.trim(); }) : [];
   return [
     'You are drafting a reply to a workplace chat message on Chatwork. The',
     'conversation is most often Japanese business communication, but may be in',
@@ -35,10 +36,12 @@ function buildPrompt(message, instructions, sender) {
     'IMPORTANT — who is who:',
     '- The message below was WRITTEN AND SENT BY: ' + (sender && sender.trim() ? sender.trim() : '(unknown sender)') + '.',
     '  This is the person you are replying TO.',
-    '- Any [To:ID]Name, [返信 ...]Name, or [rp ...]Name tags INSIDE the message are',
-    '  people the sender was addressing (recipients/mentions). The name after such',
-    '  a tag is a RECIPIENT — it is NOT the sender. Do not mistake those names for',
-    '  the author of the message.',
+    recList.length
+      ? '- The sender addressed it TO these recipients: ' + recList.join(', ') + '. These' +
+        '\n  names are recipients/mentions — NOT the author. Do not mistake them for the sender.'
+      : '- Any [To:ID]Name, [返信 ...]Name, or [rp ...]Name tags INSIDE the message are' +
+        '\n  people the sender was addressing (recipients/mentions). The name after such' +
+        '\n  a tag is a RECIPIENT — it is NOT the sender.',
     '',
     'Write a reply to the message below, addressed to the sender, following the',
     'user’s instructions.',
@@ -131,14 +134,15 @@ const server = http.createServer((req, res) => {
       const parsed = JSON.parse(body || '{}');
       const message = (parsed.message || '').toString();
       const sender = (parsed.sender || '').toString();
+      const recipients = Array.isArray(parsed.recipients) ? parsed.recipients : [];
       const instructions = (parsed.instructions || '').toString();
       if (!instructions.trim()) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'No reply instructions provided.' }));
         return;
       }
-      console.log('[reply] from "' + sender + '", msg ' + message.length + ' chars, instructions ' + instructions.length + ' chars → running claude…');
-      const reply = await runClaude(buildPrompt(message, instructions, sender));
+      console.log('[reply] from "' + sender + '" to [' + recipients.join(', ') + '], msg ' + message.length + ' chars, instructions ' + instructions.length + ' chars → running claude…');
+      const reply = await runClaude(buildPrompt(message, instructions, sender, recipients));
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ reply: reply }));
       console.log('[reply] done');

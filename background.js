@@ -13,7 +13,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   fetch(BRIDGE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: msg.message || '', sender: msg.sender || '', instructions: msg.instructions || '' }),
+    body: JSON.stringify({ message: msg.message || '', sender: msg.sender || '', recipients: msg.recipients || [], instructions: msg.instructions || '' }),
   })
     .then(async (r) => {
       let data = {};

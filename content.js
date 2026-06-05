@@ -69,6 +69,7 @@
   let modalEl = null;
   let currentMessage = '';
   let currentSender = '';
+  let currentRecipients = [];
 
   // Make Chatwork mention tags readable so it's clear the name that follows is
   // a RECIPIENT the sender addressed — not the sender of the message.
@@ -95,15 +96,19 @@
           '<button type="button" class="cwr-btn cwr-close" aria-label="Close">✕</button>' +
         '</div>' +
         '<div class="cwr-body">' +
-          '<label class="cwr-label">Message you’re replying to</label>' +
-          '<div class="cwr-sender"></div>' +
-          '<div class="cwr-original"></div>' +
-          '<label class="cwr-label">How should Claude reply?</label>' +
-          '<textarea class="cwr-instructions" spellcheck="false" placeholder="e.g. 「了承したと伝えて、明日までに対応すると追記」 / Politely decline and propose next week"></textarea>' +
-          '<div class="cwr-controls">' +
-            '<button type="button" class="cwr-btn cwr-primary cwr-run">Generate</button>' +
-            '<span class="cwr-status"></span>' +
+          '<div class="cwr-context">' +
+            '<label class="cwr-label">Message you’re replying to</label>' +
+            '<div class="cwr-sender"></div>' +
+            '<div class="cwr-recipients" style="display:none"></div>' +
+            '<div class="cwr-original"></div>' +
+            '<label class="cwr-label">How should Claude reply?</label>' +
+            '<textarea class="cwr-instructions" spellcheck="false" placeholder="e.g. 「了承したと伝えて、明日までに対応すると追記」 / Politely decline and propose next week"></textarea>' +
+            '<div class="cwr-controls">' +
+              '<button type="button" class="cwr-btn cwr-primary cwr-run">Generate</button>' +
+              '<span class="cwr-status"></span>' +
+            '</div>' +
           '</div>' +
+          '<button type="button" class="cwr-expand" style="display:none">✎ Edit message &amp; instructions</button>' +
           '<div class="cwr-result" style="display:none">' +
             '<div class="cwr-result-head">' +
               '<label class="cwr-label">Draft reply</label>' +
@@ -129,6 +134,11 @@
     overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) closeModal(); });
     overlay.querySelector('.cwr-close').addEventListener('click', closeModal);
     overlay.querySelector('.cwr-run').addEventListener('click', runReply);
+    overlay.querySelector('.cwr-expand').addEventListener('click', function () {
+      overlay.classList.remove('cwr-collapsed');
+      overlay.querySelector('.cwr-expand').style.display = 'none';
+      overlay.querySelector('.cwr-instructions').focus();
+    });
     overlay.querySelector('.cwr-copy').addEventListener('click', function (e) {
       copyToClipboard(overlay.querySelector('.cwr-draft').value, e.target);
     });
@@ -173,31 +183,49 @@
     if (!instructions.trim()) { showError('Tell Claude how you’d like to reply first.'); return; }
     setStatus('Drafting…', true);
 
-    chrome.runtime.sendMessage({ type: 'reply', message: currentMessage, sender: currentSender, instructions: instructions })
+    chrome.runtime.sendMessage({ type: 'reply', message: currentMessage, sender: currentSender, recipients: currentRecipients, instructions: instructions })
       .then(function (resp) {
         if (!resp) { showError('No response from the extension background.'); return; }
         if (!resp.ok) { showError(resp.error, resp.notReachable); return; }
         overlay.querySelector('.cwr-draft').value = resp.reply || '';
         overlay.querySelector('.cwr-result').style.display = 'block';
-        setStatus('Done', false);
+        // Collapse the context so the draft is the focus; offer a way back.
+        overlay.classList.add('cwr-collapsed');
+        overlay.querySelector('.cwr-expand').style.display = 'block';
+        setStatus('', false);
       })
       .catch(function (err) {
         showError(err && err.message ? err.message : String(err));
       });
   }
 
-  function openModal(message, sender) {
+  function openModal(parsed, sender) {
     if (!modalEl) modalEl = buildModal();
-    currentMessage = message || '';
+    parsed = parsed || {};
+    currentMessage = parsed.body || '';
+    currentRecipients = parsed.recipients || [];
     currentSender = (sender || '').trim();
+
     const senderBox = modalEl.querySelector('.cwr-sender');
     senderBox.textContent = currentSender ? 'From: ' + currentSender : 'From: (unknown sender)';
+
+    const recBox = modalEl.querySelector('.cwr-recipients');
+    if (currentRecipients.length) {
+      recBox.style.display = 'block';
+      recBox.textContent = 'To: ' + currentRecipients.join('、');
+    } else {
+      recBox.style.display = 'none';
+    }
+
     modalEl.querySelector('.cwr-original').textContent =
       prettifyMentions(currentMessage) || '(could not read the message text)';
     modalEl.querySelector('.cwr-instructions').value = '';
     modalEl.querySelector('.cwr-draft').value = '';
     modalEl.querySelector('.cwr-result').style.display = 'none';
     modalEl.querySelector('.cwr-error').style.display = 'none';
+    // Always start expanded so the context is visible before generating.
+    modalEl.classList.remove('cwr-collapsed');
+    modalEl.querySelector('.cwr-expand').style.display = 'none';
     setStatus('', false);
     modalEl.classList.add('cwr-open');
     modalEl.querySelector('.cwr-instructions').focus();
@@ -237,9 +265,38 @@
     return null;
   }
 
-  function readMessageText(container) {
+  // Chatwork renders [To:]/[返信] mentions as element "pills" inside the <pre>,
+  // while the actual message body is a text node. So leading element children
+  // are recipients the sender addressed; the rest is the body. (If the raw
+  // source still has literal tags, prettifyMentions handles those in the body.)
+  function readMessage(container) {
     const pre = container.querySelector('pre');
-    return pre ? (pre.innerText || pre.textContent || '') : '';
+    if (!pre) return { recipients: [], body: '' };
+
+    const recipients = [];
+    let body = '';
+    let inBody = false;
+
+    pre.childNodes.forEach(function (node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        if (!inBody && !node.textContent.trim()) return; // skip leading blank lines
+        inBody = true;
+        body += node.textContent;
+        return;
+      }
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const t = (node.innerText || node.textContent || '').trim();
+        if (!inBody) {
+          if (t) recipients.push(t.replace(/さん$/, ''));
+        } else {
+          body += (node.innerText || node.textContent || ''); // inline link/emoji in body
+        }
+      }
+    });
+
+    body = body.replace(/^\s+/, '');
+    if (!recipients.length && !body) body = pre.innerText || pre.textContent || '';
+    return { recipients: recipients, body: body };
   }
 
   // Find the timestamp element inside the container, if any, to anchor below.
@@ -258,7 +315,7 @@
     btn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
-      openModal(readMessageText(container), senderName);
+      openModal(readMessage(container), senderName);
     });
     return btn;
   }

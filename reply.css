@@ -83,6 +83,29 @@
   padding: 2px 0;
 }
 
+.cwr-recipients {
+  font-size: 12px;
+  font-weight: 700;
+  color: #c46a00;
+  padding: 0 0 2px;
+}
+
+/* Collapse the context block after Generate so the draft is the focus. */
+.cwr-collapsed .cwr-context { display: none; }
+
+.cwr-expand {
+  align-self: flex-start;
+  margin-bottom: 2px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid #e08a00;
+  border-radius: 6px;
+  background: #fff6e5;
+  color: #b35a00;
+  cursor: pointer;
+}
+.cwr-expand:hover { background: #ffedcc; }
+
 .cwr-original {
   white-space: pre-wrap;
   word-break: break-word;
