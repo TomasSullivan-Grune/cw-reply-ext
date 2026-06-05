@@ -76,6 +76,13 @@
   margin-top: 4px;
 }
 
+.cwr-sender {
+  font-size: 13px;
+  font-weight: 700;
+  color: #b35a00;
+  padding: 2px 0;
+}
+
 .cwr-original {
   white-space: pre-wrap;
   word-break: break-word;

@@ -68,6 +68,22 @@
 
   let modalEl = null;
   let currentMessage = '';
+  let currentSender = '';
+
+  // Make Chatwork mention tags readable so it's clear the name that follows is
+  // a RECIPIENT the sender addressed — not the sender of the message.
+  function prettifyMentions(text) {
+    return text
+      .replace(/\[返信\s+aid=\d+\s+to=[\d-]+\]\s*([^\n\[]*)/g, function (_m, name) {
+        return '↩ 宛先/To: ' + name.trim();
+      })
+      .replace(/\[rp\s+aid=\d+\s+to=[\d-]+\]\s*([^\n\[]*)/g, function (_m, name) {
+        return '↩ 宛先/To: ' + name.trim();
+      })
+      .replace(/\[To:\d+\]\s*([^\n\[]*)/g, function (_m, name) {
+        return '@宛先/To: ' + name.trim();
+      });
+  }
 
   function buildModal() {
     const overlay = document.createElement('div');
@@ -80,6 +96,7 @@
         '</div>' +
         '<div class="cwr-body">' +
           '<label class="cwr-label">Message you’re replying to</label>' +
+          '<div class="cwr-sender"></div>' +
           '<div class="cwr-original"></div>' +
           '<label class="cwr-label">How should Claude reply?</label>' +
           '<textarea class="cwr-instructions" spellcheck="false" placeholder="e.g. 「了承したと伝えて、明日までに対応すると追記」 / Politely decline and propose next week"></textarea>' +
@@ -156,7 +173,7 @@
     if (!instructions.trim()) { showError('Tell Claude how you’d like to reply first.'); return; }
     setStatus('Drafting…', true);
 
-    chrome.runtime.sendMessage({ type: 'reply', message: currentMessage, instructions: instructions })
+    chrome.runtime.sendMessage({ type: 'reply', message: currentMessage, sender: currentSender, instructions: instructions })
       .then(function (resp) {
         if (!resp) { showError('No response from the extension background.'); return; }
         if (!resp.ok) { showError(resp.error, resp.notReachable); return; }
@@ -169,10 +186,14 @@
       });
   }
 
-  function openModal(message) {
+  function openModal(message, sender) {
     if (!modalEl) modalEl = buildModal();
     currentMessage = message || '';
-    modalEl.querySelector('.cwr-original').textContent = currentMessage || '(could not read the message text)';
+    currentSender = (sender || '').trim();
+    const senderBox = modalEl.querySelector('.cwr-sender');
+    senderBox.textContent = currentSender ? 'From: ' + currentSender : 'From: (unknown sender)';
+    modalEl.querySelector('.cwr-original').textContent =
+      prettifyMentions(currentMessage) || '(could not read the message text)';
     modalEl.querySelector('.cwr-instructions').value = '';
     modalEl.querySelector('.cwr-draft').value = '';
     modalEl.querySelector('.cwr-result').style.display = 'none';
@@ -228,7 +249,7 @@
            null;
   }
 
-  function createTrigger(container) {
+  function createTrigger(container, senderName) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'cwr-trigger';
@@ -237,7 +258,7 @@
     btn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
-      openModal(readMessageText(container));
+      openModal(readMessageText(container), senderName);
     });
     return btn;
   }
@@ -249,7 +270,8 @@
       if (container.getAttribute('data-cwr-injected')) return;
       container.setAttribute('data-cwr-injected', '1');
 
-      const btn = createTrigger(container);
+      const senderName = (nameEl.innerText || nameEl.textContent || '').trim();
+      const btn = createTrigger(container, senderName);
       const time = findTimeAnchor(container);
       if (time && time.parentElement) {
         time.parentElement.insertBefore(btn, time.nextSibling);
