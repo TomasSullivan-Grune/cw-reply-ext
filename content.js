@@ -275,7 +275,11 @@
     const pre = container.querySelector('pre');
     if (!pre) return { recipients: [], body: '' };
 
-    const body = (pre.innerText || pre.textContent || '').trim();
+    let body = (pre.innerText || pre.textContent || '').trim();
+    // Chatwork's "返信元" (jump-to-original-reply) button leaves its label in the
+    // text, followed by blank lines and then the replied-to name. Relabel it
+    // "reply to:" and pull the name onto the same line.
+    body = body.replace(/返信元\s*/g, 'reply to: ');
 
     const recipients = [];
     pre.querySelectorAll('a').forEach(function (a) {
