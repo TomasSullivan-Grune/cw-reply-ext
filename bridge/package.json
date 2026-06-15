@@ -1,0 +1,11 @@
+{
+  "name": "cw-reply-bridge",
+  "version": "1.0.0",
+  "description": "Local bridge for the Chatwork Reply extension",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
