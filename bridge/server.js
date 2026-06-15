@@ -3,7 +3,7 @@
  *
  * Listens on http://localhost:8766 and, for each request, runs Claude Code in
  * headless mode (`claude -p`) to draft a reply to the supplied Chatwork message
- * following the user's instructions. Auth is whatever Claude Code is already
+ * following the user’s instructions. Auth is whatever Claude Code is already
  * configured with (your Max subscription, or an ANTHROPIC_API_KEY if set).
  * No credentials are handled here.
  *
@@ -21,14 +21,16 @@
 const http = require('http');
 const os = require('os');
 const { spawn } = require('child_process');
+const { createContext } = require('./context');
 
 const PORT = Number(process.env.CW_REPLY_PORT) || 8766;
 const MODEL = process.env.CW_REPLY_MODEL || '';
 const TIMEOUT_MS = 120000;
+const projectContext = createContext();
 
-function buildPrompt(message, instructions, sender, recipients) {
+function buildPrompt(message, instructions, sender, recipients, context) {
   const recList = Array.isArray(recipients) ? recipients.filter(function (r) { return r && r.trim(); }) : [];
-  return [
+  const lines = [
     'You are drafting a reply to a workplace chat message on Chatwork. The',
     'conversation is most often Japanese business communication, but may be in',
     'any language.',
@@ -63,12 +65,26 @@ function buildPrompt(message, instructions, sender, recipients) {
     'meta-commentary, no "this is a", no skill notices, no explanations, no code',
     'fences, no surrounding quotes.',
     '',
+  ];
+
+  if (context && context.trim()) {
+    lines.push(
+      context.trim(),
+      'Use the project background above only to inform the reply — do not copy it',
+      'verbatim and do not invent facts or commitments from it.',
+      ''
+    );
+  }
+
+  lines.push(
     'Message from ' + (sender && sender.trim() ? sender.trim() : 'the sender') + ':',
     message,
     '',
     'User’s instructions for the reply:',
-    instructions,
-  ].join('\n');
+    instructions
+  );
+
+  return lines.join('\n');
 }
 
 function runClaude(prompt) {
@@ -143,15 +159,25 @@ const server = http.createServer((req, res) => {
       const sender = (parsed.sender || '').toString();
       const recipients = Array.isArray(parsed.recipients) ? parsed.recipients : [];
       const instructions = (parsed.instructions || '').toString();
+      const roomId = (parsed.roomId || '').toString();
       if (!instructions.trim()) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'No reply instructions provided.' }));
         return;
       }
-      console.log('[reply] from "' + sender + '" to [' + recipients.join(', ') + '], msg ' + message.length + ' chars, instructions ' + instructions.length + ' chars → running claude…');
-      const reply = await runClaude(buildPrompt(message, instructions, sender, recipients));
+      let context = '';
+      let unmapped = false;
+      try {
+        const assembled = await projectContext.assemble(roomId);
+        context = assembled.context;
+        unmapped = assembled.unmapped;
+      } catch (e) {
+        console.error('[reply] context error (ignored):', (e && e.message) || e);
+      }
+      console.log('[reply] from "' + sender + '" to [' + recipients.join(', ') + '], room ' + (roomId || '-') + ', msg ' + message.length + ' chars, instructions ' + instructions.length + ' chars, context ' + context.length + ' chars → running claude…');
+      const reply = await runClaude(buildPrompt(message, instructions, sender, recipients, context));
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ reply: reply }));
+      res.end(JSON.stringify({ reply: reply, unmapped: unmapped }));
       console.log('[reply] done');
     } catch (e) {
       const msg = (e && e.message) || String(e);
