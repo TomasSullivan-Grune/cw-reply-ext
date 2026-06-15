@@ -185,3 +185,13 @@
   border-radius: 4px;
   border: 1px solid #f0c0c0;
 }
+
+.cwr-notice {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #8a6d3b;
+  background: #fcf8e3;
+  border: 1px solid #faebcc;
+  border-radius: 4px;
+}
