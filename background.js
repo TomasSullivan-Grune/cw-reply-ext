@@ -13,7 +13,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   fetch(BRIDGE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: msg.message || '', sender: msg.sender || '', recipients: msg.recipients || [], instructions: msg.instructions || '' }),
+    body: JSON.stringify({ message: msg.message || '', sender: msg.sender || '', recipients: msg.recipients || [], instructions: msg.instructions || '', roomId: msg.roomId || '' }),
   })
     .then(async (r) => {
       let data = {};
@@ -22,7 +22,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         sendResponse({ ok: false, error: data.error || ('HTTP ' + r.status) });
         return;
       }
-      sendResponse({ ok: true, reply: data.reply || '' });
+      sendResponse({ ok: true, reply: data.reply || '', unmapped: !!data.unmapped });
     })
     .catch((e) => {
       // A network failure here almost always means the bridge isn't running.

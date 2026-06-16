@@ -86,6 +86,12 @@
       });
   }
 
+  // Chatwork puts the open room in the URL hash, e.g. "#!rid438334858".
+  function getRoomId() {
+    const m = /#!rid(\d+)/.exec(location.hash || '');
+    return m ? m[1] : '';
+  }
+
   function buildModal() {
     const overlay = document.createElement('div');
     overlay.className = 'cwr-overlay';
@@ -96,6 +102,7 @@
           '<button type="button" class="cwr-btn cwr-close" aria-label="Close">✕</button>' +
         '</div>' +
         '<div class="cwr-body">' +
+          '<div class="cwr-notice" style="display:none"></div>' +
           '<div class="cwr-context">' +
             '<label class="cwr-label">Message you’re replying to</label>' +
             '<div class="cwr-sender"></div>' +
@@ -160,6 +167,13 @@
     s.className = 'cwr-status' + (busy ? ' cwr-busy' : '');
   }
 
+  function setNotice(text) {
+    const n = modalEl.querySelector('.cwr-notice');
+    if (!text) { n.style.display = 'none'; n.textContent = ''; return; }
+    n.style.display = 'block';
+    n.textContent = text;
+  }
+
   function showError(msg, notReachable) {
     const box = modalEl.querySelector('.cwr-error');
     box.style.display = 'block';
@@ -182,11 +196,13 @@
     const instructions = overlay.querySelector('.cwr-instructions').value;
     if (!instructions.trim()) { showError('Tell Claude how you’d like to reply first.'); return; }
     setStatus('Drafting…', true);
+    setNotice('');
 
-    chrome.runtime.sendMessage({ type: 'reply', message: currentMessage, sender: currentSender, recipients: currentRecipients, instructions: instructions })
+    chrome.runtime.sendMessage({ type: 'reply', message: currentMessage, sender: currentSender, recipients: currentRecipients, instructions: instructions, roomId: getRoomId() })
       .then(function (resp) {
         if (!resp) { showError('No response from the extension background.'); return; }
         if (!resp.ok) { showError(resp.error, resp.notReachable); return; }
+        if (resp.unmapped) { setNotice('No project context for this room.'); }
         overlay.querySelector('.cwr-draft').value = resp.reply || '';
         overlay.querySelector('.cwr-result').style.display = 'block';
         // Collapse the context so the draft is the focus; offer a way back.
@@ -205,6 +221,7 @@
     currentMessage = parsed.body || '';
     currentRecipients = parsed.recipients || [];
     currentSender = (sender || '').trim();
+    setNotice('');
 
     const senderBox = modalEl.querySelector('.cwr-sender');
     senderBox.textContent = currentSender ? 'From: ' + currentSender : 'From: (unknown sender)';
